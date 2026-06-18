@@ -46,3 +46,10 @@ alan (mentalnyy34)
 *Главное окно программы*
 
 ![Главное окно alanator](2026-06-18%2014_06_53-alanator.png)
+
+*Интерфейс управления архивами*
+<img width="597" height="523" alt="2026-06-18 14_18_28-📦 alanator_backup zip (1 files)" src="https://github.com/user-attachments/assets/91d21dc9-3ab5-44f3-88db-813e7b704dd9" />
+
+*Интерфейс настроек*
+<img width="890" height="668" alt="2026-06-18 14_22_16-Настройки" src="https://github.com/user-attachments/assets/7e8332fa-896b-45dc-91d3-13b28b96c483" />
+
