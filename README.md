@@ -30,7 +30,7 @@ python 3.12+
 customtkinter
 
 ## лицензия
-MIT
+MIT License
 
 ## 🚀 что нового (last updates)
 
@@ -54,7 +54,7 @@ alan (mentalnyy34)
 - ## 🧭 В планах
 - Версия для Android, IOS, Linux.
 - Исправление всех багов.
-- 
+ 
 ## 🖥️ Скриншоты
 
 *Интерфейс создания нового архива*
