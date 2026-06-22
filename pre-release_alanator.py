@@ -163,12 +163,7 @@ class AlanatorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        if len(sys.argv) > 1:
-            file_path = sys.argv[1]
-            if file_path.endswith(('.aln', '.zip', '.7z')):
-                self.view_archive_file(file_path)
-                return
-        
+        # ===== СОЗДАЁМ ГЛАВНОЕ ОКНО =====
         self.title("alanator")
         self.geometry("1200x700")
         self.current_path = "Computer"
@@ -177,6 +172,7 @@ class AlanatorApp(ctk.CTk):
         self.selected_files = []
         self.selected_folder = None
         
+        # ===== ЗАГРУЖАЕМ НАСТРОЙКИ =====
         self.settings_file = "alanator_settings.json"
         self.settings = self.load_settings()
         
@@ -201,6 +197,12 @@ class AlanatorApp(ctk.CTk):
         self.create_main_area()
         self.refresh_tree()
         self.refresh_files()
+        
+        # ===== ОБРАБОТКА АРГУМЕНТОВ (ПОСЛЕ ОТРИСОВКИ) =====
+        if len(sys.argv) > 1:
+            file_path = sys.argv[1]
+            if file_path.endswith(('.aln', '.zip', '.7z', '.tar')):
+                self.after(100, lambda: self.view_archive_file(file_path))
     
     def load_settings(self):
         if os.path.exists(self.settings_file):
@@ -217,6 +219,10 @@ class AlanatorApp(ctk.CTk):
                 json.dump(self.settings, f, indent=4, ensure_ascii=False)
         except:
             pass
+    
+    def update_status(self, text):
+        if hasattr(self, 'status_label'):
+            self.status_label.configure(text=text)
     
     def update_language(self):
         self.title(tr("title"))
@@ -254,6 +260,7 @@ class AlanatorApp(ctk.CTk):
         list_menu.add_command(label=tr("by_size"), command=lambda: self.sort_files("size"))
         list_menu.add_command(label=tr("by_type"), command=lambda: self.sort_files("type"))
         list_menu.add_command(label=tr("by_date"), command=lambda: self.sort_files("date"))
+        list_menu.add_command(label="По расширению", command=lambda: self.sort_files("ext"))
         
         tools_menu = Menu(menubar, tearoff=0)
         menubar.add_cascade(label=tr("tools"), menu=tools_menu)
@@ -301,12 +308,24 @@ class AlanatorApp(ctk.CTk):
         self.create_settings_archives(tabview.tab("Архивы"))
         tabview.add("Тема")
         self.create_settings_theme(tabview.tab("Тема"))
+        tabview.add("Безопасность")
+        self.create_settings_security(tabview.tab("Безопасность"))
         
         btn_frame = ctk.CTkFrame(win)
         btn_frame.pack(fill="x", padx=20, pady=10)
         ctk.CTkButton(btn_frame, text="OK", width=100, command=lambda: self.apply_settings(win)).pack(side="right", padx=5)
         ctk.CTkButton(btn_frame, text="Отмена", width=100, command=win.destroy).pack(side="right", padx=5)
         ctk.CTkButton(btn_frame, text="Очистить", width=100, command=lambda: self.clear_settings()).pack(side="right", padx=5)
+    
+    def create_settings_security(self, parent):
+        ctk.CTkLabel(parent, text="Пароли", font=("Arial", 14, "bold")).pack(anchor="w", padx=20, pady=(15,5))
+        
+        self.save_password_var = ctk.BooleanVar(value=self.settings.get("save_password", False))
+        ctk.CTkCheckBox(parent, text="Сохранять последний использованный пароль", variable=self.save_password_var).pack(anchor="w", padx=20)
+        
+        self.last_password_var = ctk.StringVar(value=self.settings.get("last_password", ""))
+        ctk.CTkLabel(parent, text="Последний пароль (будет подставлен автоматически):", anchor="w").pack(anchor="w", padx=20, pady=(10,0))
+        ctk.CTkEntry(parent, textvariable=self.last_password_var, width=300, show="*").pack(anchor="w", padx=20, pady=5)
     
     def apply_settings(self, win):
         self.settings["theme"] = self.theme_var.get()
@@ -336,6 +355,8 @@ class AlanatorApp(ctk.CTk):
         self.settings["link_color"] = self.link_color.get()
         self.settings["contrast"] = self.contrast_var.get()
         self.settings["spacing"] = self.spacing_var.get()
+        self.settings["save_password"] = self.save_password_var.get()
+        self.settings["last_password"] = self.last_password_var.get()
         
         theme = self.settings["theme"]
         if theme == "Тёмная":
@@ -482,12 +503,6 @@ class AlanatorApp(ctk.CTk):
     def run_as_other(self):
         messagebox.showinfo("другой пользователь", "функция будет в следующей версии")
     
-    def load_profile(self):
-        messagebox.showinfo("профиль", "загрузка профиля будет в следующей версии")
-    
-    def save_profile(self):
-        messagebox.showinfo("профиль", "сохранение профиля будет в следующей версии")
-    
     def file_associations(self):
         messagebox.showinfo("ассоциации файлов", "связать .aln, .zip, .7z с alanator")
     
@@ -497,22 +512,16 @@ class AlanatorApp(ctk.CTk):
     def zip_encoding(self):
         messagebox.showinfo("кодировка", "выбор кодировки для zip (utf-8, cp866, etc)")
     
-    def language_settings(self):
-        messagebox.showinfo("язык", "русский, английский и другие")
-    
-    def show_changelog(self):
-        changelog = "alanator 1.0\n- первый релиз\n- поддержка zip, 7z, tar, aln\n- шифрование архивов\n- пкм меню\n- просмотр bat файлов\n- прогресс-бар"
-        messagebox.showinfo("журнал изменений", changelog)
-    
     def about_program(self):
         about = "alanator\nархиватор от алана\nверсия 1.0\n\nсделано с любовью и промтами"
         messagebox.showinfo("о программе", about)
-    
+
     def associate_files(self):
         try:
             import winreg
             exe_path = os.path.abspath(sys.argv[0])
             
+            # ===== ALN =====
             with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, ".aln") as key:
                 winreg.SetValue(key, "", winreg.REG_SZ, "alanator.aln")
             
@@ -521,68 +530,468 @@ class AlanatorApp(ctk.CTk):
                 with winreg.CreateKey(key, "shell\\open\\command") as cmd:
                     winreg.SetValue(cmd, "", winreg.REG_SZ, f'"{exe_path}" "%1"')
             
-            with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, ".zip") as key:
-                winreg.SetValue(key, "", winreg.REG_SZ, "alanator.zip")
+            # ===== 7Z =====
+            with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, ".7z") as key:
+                winreg.SetValue(key, "", winreg.REG_SZ, "alanator.7z")
             
-            with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, "alanator.zip") as key:
-                winreg.SetValue(key, "", winreg.REG_SZ, "alanator zip архив")
+            with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, "alanator.7z") as key:
+                winreg.SetValue(key, "", winreg.REG_SZ, "alanator 7z архив")
                 with winreg.CreateKey(key, "shell\\open\\command") as cmd:
                     winreg.SetValue(cmd, "", winreg.REG_SZ, f'"{exe_path}" "%1"')
             
-            messagebox.showinfo("готово", "ассоциация .aln и .zip добавлена. перезапустите проводник для применения.")
+            # ===== TAR =====
+            with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, ".tar") as key:
+                winreg.SetValue(key, "", winreg.REG_SZ, "alanator.tar")
+            
+            with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, "alanator.tar") as key:
+                winreg.SetValue(key, "", winreg.REG_SZ, "alanator tar архив")
+                with winreg.CreateKey(key, "shell\\open\\command") as cmd:
+                    winreg.SetValue(cmd, "", winreg.REG_SZ, f'"{exe_path}" "%1"')
+            
+            # ===== ZIP (ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАПИСЬ) =====
+            # Сначала проверяем, кто сейчас владеет .zip
+            try:
+                current_owner = winreg.QueryValue(winreg.HKEY_CLASSES_ROOT, ".zip")
+            except:
+                current_owner = ""
+            
+            # Если .zip не наш — перезаписываем
+            if current_owner != "alanator.zip":
+                # Создаём класс для .zip
+                with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, "alanator.zip") as key:
+                    winreg.SetValue(key, "", winreg.REG_SZ, "alanator zip архив")
+                    with winreg.CreateKey(key, "shell\\open\\command") as cmd:
+                        winreg.SetValue(cmd, "", winreg.REG_SZ, f'"{exe_path}" "%1"')
+                
+                # Перезаписываем ассоциацию .zip
+                with winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, ".zip") as key:
+                    winreg.SetValue(key, "", winreg.REG_SZ, "alanator.zip")
+            
+            # ===== ДОПОЛНИТЕЛЬНО: ОЧИЩАЕМ UserChoice ДЛЯ .ZIP =====
+            try:
+                # Пытаемся удалить пользовательский выбор для .zip
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.zip\\UserChoice")
+            except:
+                pass
+            
+            # Создаём новый UserChoice для .zip
+            try:
+                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.zip\\UserChoice") as key:
+                    winreg.SetValue(key, "Progid", winreg.REG_SZ, "alanator.zip")
+                    winreg.SetValue(key, "Hash", winreg.REG_SZ, "")
+            except:
+                pass
+            
+            messagebox.showinfo("готово", 
+                "ассоциация добавлена.\n"
+                ".aln, .zip, .7z, .tar теперь открываются в alanator.\n\n"
+                "Если .zip не работает — перезагрузите компьютер.")
+                
         except Exception as e:
-            messagebox.showerror("ошибка", f"не удалось добавить ассоциацию. запустите программу от имени администратора.\n{str(e)}")
-    
+            messagebox.showerror("ошибка", f"не удалось добавить ассоциацию. запустите программу от имени администратора.\n{str(e)}")    
     def view_archive(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Архивы", "*.zip *.7z *.aln")])
+        file_path = filedialog.askopenfilename(filetypes=[("Архивы", "*.zip *.7z *.aln *.tar")])
         if not file_path:
             return
         self.view_archive_file(file_path)
-    
+    def _get_password_with_validation(self, file_path, retry=False):
+        """Запрашивает пароль с проверкой на пустоту. Возвращает пароль или None."""
+        title = "пароль"
+        if retry:
+            text = f"неверный пароль. введите снова для {os.path.basename(file_path)}:"
+        else:
+            text = f"введите пароль для {os.path.basename(file_path)}:"
+        
+        while True:
+            pwd = ctk.CTkInputDialog(text=text, title=title).get_input()
+            if pwd is None:
+                return None  # отмена или крестик
+            if pwd.strip() == "":
+                messagebox.showwarning("внимание", "пароль не может быть пустым")
+                continue
+            return pwd    
     def view_archive_file(self, file_path):
         try:
+            password = None
+            files = []
+            temp_zip = None
+            
+            # ===== 1. ПРОВЕРЯЕМ ALN НА НАЛИЧИЕ ПАРОЛЯ =====
+            is_encrypted = False
             if file_path.endswith('.aln'):
-                with open(file_path, 'rb') as f:
-                    header = f.read(4)
-                    if header != b'ALN\x00':
-                        messagebox.showerror("ошибка", "неверный формат .aln")
+                try:
+                    with open(file_path, 'rb') as f:
+                        header = f.read(4)
+                        if header != b'ALN\x00':
+                            messagebox.showerror("ошибка", "неверный формат .aln")
+                            return
+                        f.read(2)  # версия
+                        f.read(8)  # timestamp
+                        f.read(4)  # кол-во файлов
+                        flag = f.read(6)
+                        if flag == b'PASS\x00':
+                            is_encrypted = True
+                except Exception as e:
+                    pass
+            
+            # ===== 2. ALN =====
+            if file_path.endswith('.aln'):
+                # 2А. ЕСЛИ НЕ ЗАШИФРОВАН — ОТКРЫВАЕМ БЕЗ ПАРОЛЯ
+                if not is_encrypted:
+                    try:
+                        with open(file_path, 'rb') as f:
+                            data = f.read()
+                            zip_start = data.find(b'PK')
+                            if zip_start == -1:
+                                messagebox.showerror("ошибка", "архив .aln повреждён")
+                                return
+                            temp_zip = file_path.replace('.aln', '_temp.zip')
+                            with open(temp_zip, 'wb') as zf:
+                                zf.write(data[zip_start:])
+                            with zipfile.ZipFile(temp_zip, 'r') as zf:
+                                files = zf.namelist()
+                            os.remove(temp_zip)
+                        self._create_archive_view_window(file_path, files, None)
                         return
-                    data = f.read()
-                    zip_start = data.find(b'PK')
-                    if zip_start == -1:
-                        messagebox.showerror("ошибка", "архив .aln повреждён")
-                        return
-                    temp_zip = file_path.replace('.aln', '_temp.zip')
-                    with open(temp_zip, 'wb') as zf:
-                        zf.write(data[zip_start:])
-                    with zipfile.ZipFile(temp_zip, 'r') as zf:
+                    except Exception as e:
+                        if temp_zip and os.path.exists(temp_zip):
+                            os.remove(temp_zip)
+                        is_encrypted = True
+                
+                # 2Б. ЕСЛИ ЗАШИФРОВАН — ЗАПРАШИВАЕМ ПАРОЛЬ
+                if is_encrypted:
+                    # проверяем сохранённый пароль
+                    saved_pwd = self.settings.get("last_password", "")
+                    if self.settings.get("save_password", False) and saved_pwd:
+                        if messagebox.askyesno("Пароль", f"использовать сохранённый пароль для {os.path.basename(file_path)}?"):
+                            password = saved_pwd
+                        else:
+                            pwd = self._get_password_with_validation(file_path)
+                            if pwd is None:
+                                return
+                            password = pwd
+                    else:
+                        pwd = self._get_password_with_validation(file_path)
+                        if pwd is None:
+                            return
+                        password = pwd
+                    
+                    # открываем с паролем
+                    with open(file_path, 'rb') as f:
+                        data = f.read()
+                        zip_start = data.find(b'PK')
+                        if zip_start == -1:
+                            messagebox.showerror("ошибка", "архив .aln повреждён")
+                            return
+                        temp_zip = file_path.replace('.aln', '_temp.zip')
+                        with open(temp_zip, 'wb') as zf:
+                            zf.write(data[zip_start:])
+                    
+                    try:
+                        if password:
+                            with pyzipper.AESZipFile(temp_zip, 'r') as zf:
+                                zf.setpassword(password.encode('utf-8'))
+                                files = zf.namelist()
+                        else:
+                            with zipfile.ZipFile(temp_zip, 'r') as zf:
+                                files = zf.namelist()
+                    except Exception as e:
+                        if "Bad password" in str(e) or "password" in str(e).lower():
+                            pwd2 = self._get_password_with_validation(file_path, retry=True)
+                            if pwd2 is None:
+                                if os.path.exists(temp_zip):
+                                    os.remove(temp_zip)
+                                return
+                            password = pwd2
+                            with pyzipper.AESZipFile(temp_zip, 'r') as zf:
+                                zf.setpassword(password.encode('utf-8'))
+                                files = zf.namelist()
+                        else:
+                            if os.path.exists(temp_zip):
+                                os.remove(temp_zip)
+                            raise e
+                    if os.path.exists(temp_zip):
+                        os.remove(temp_zip)
+                    
+                    self._create_archive_view_window(file_path, files, password)
+                    return
+            
+            # ===== 3. ZIP =====
+            if file_path.endswith('.zip'):
+                try:
+                    # пробуем без пароля
+                    with zipfile.ZipFile(file_path, 'r') as zf:
                         files = zf.namelist()
-                    os.remove(temp_zip)
-            elif file_path.endswith('.zip'):
-                with zipfile.ZipFile(file_path, 'r') as zf:
-                    files = zf.namelist()
-            else:
-                messagebox.showerror("ошибка", "формат не поддерживается")
+                    self._create_archive_view_window(file_path, files, None)
+                    return
+                except:
+                    pass
+                
+                # запрашиваем пароль
+                saved_pwd = self.settings.get("last_password", "")
+                if self.settings.get("save_password", False) and saved_pwd:
+                    if messagebox.askyesno("Пароль", f"использовать сохранённый пароль для {os.path.basename(file_path)}?"):
+                        password = saved_pwd
+                    else:
+                        pwd = self._get_password_with_validation(file_path)
+                        if pwd is None:
+                            return
+                        password = pwd
+                else:
+                    pwd = self._get_password_with_validation(file_path)
+                    if pwd is None:
+                        return
+                    password = pwd
+                
+                try:
+                    if password:
+                        with pyzipper.AESZipFile(file_path, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            files = zf.namelist()
+                    else:
+                        with zipfile.ZipFile(file_path, 'r') as zf:
+                            files = zf.namelist()
+                except Exception as e:
+                    if "Bad password" in str(e) or "password" in str(e).lower():
+                        pwd2 = self._get_password_with_validation(file_path, retry=True)
+                        if pwd2 is None:
+                            return
+                        password = pwd2
+                        with pyzipper.AESZipFile(file_path, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            files = zf.namelist()
+                    else:
+                        raise e
+                
+                self._create_archive_view_window(file_path, files, password)
                 return
             
-            win = ctk.CTkToplevel(self)
-            win.title(f"содержимое {os.path.basename(file_path)}")
-            win.geometry("500x400")
+            # ===== 4. 7Z =====
+            if file_path.endswith('.7z'):
+                try:
+                    with py7zr.SevenZipFile(file_path, 'r') as archive:
+                        files = archive.getnames()
+                    self._create_archive_view_window(file_path, files, None)
+                    return
+                except:
+                    pass
+                
+                saved_pwd = self.settings.get("last_password", "")
+                if self.settings.get("save_password", False) and saved_pwd:
+                    if messagebox.askyesno("Пароль", f"использовать сохранённый пароль для {os.path.basename(file_path)}?"):
+                        password = saved_pwd
+                    else:
+                        pwd = self._get_password_with_validation(file_path)
+                        if pwd is None:
+                            return
+                        password = pwd
+                else:
+                    pwd = self._get_password_with_validation(file_path)
+                    if pwd is None:
+                        return
+                    password = pwd
+                
+                try:
+                    if password:
+                        with py7zr.SevenZipFile(file_path, 'r', password=password) as archive:
+                            files = archive.getnames()
+                    else:
+                        with py7zr.SevenZipFile(file_path, 'r') as archive:
+                            files = archive.getnames()
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "password" in error_str or "wrong" in error_str:
+                        pwd2 = self._get_password_with_validation(file_path, retry=True)
+                        if pwd2 is None:
+                            return
+                        password = pwd2
+                        with py7zr.SevenZipFile(file_path, 'r', password=password) as archive:
+                            files = archive.getnames()
+                    else:
+                        messagebox.showerror("ошибка", f"не удалось открыть 7z архив: {str(e)}")
+                        return
+                
+                self._create_archive_view_window(file_path, files, password)
+                return
             
-            textbox = ctk.CTkTextbox(win, font=("Courier New", 12))
-            textbox.pack(fill="both", expand=True, padx=10, pady=10)
-            textbox.insert("1.0", "\n".join(files))
-            textbox.configure(state="disabled")
+            # ===== 5. TAR =====
+            if file_path.endswith('.tar'):
+                try:
+                    import tarfile
+                    with tarfile.open(file_path, 'r') as tar:
+                        files = tar.getnames()
+                    self._create_archive_view_window(file_path, files, None)
+                    return
+                except:
+                    pass
+                
+                saved_pwd = self.settings.get("last_password", "")
+                if self.settings.get("save_password", False) and saved_pwd:
+                    if messagebox.askyesno("Пароль", f"использовать сохранённый пароль для {os.path.basename(file_path)}?"):
+                        password = saved_pwd
+                    else:
+                        pwd = self._get_password_with_validation(file_path)
+                        if pwd is None:
+                            return
+                        password = pwd
+                else:
+                    pwd = self._get_password_with_validation(file_path)
+                    if pwd is None:
+                        return
+                    password = pwd
+                
+                try:
+                    if password:
+                        temp_dir = os.path.join(os.path.dirname(file_path), "_temp_tar_view")
+                        os.makedirs(temp_dir, exist_ok=True)
+                        with pyzipper.AESZipFile(file_path, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            zf.extractall(temp_dir)
+                        tar_file = os.path.join(temp_dir, os.listdir(temp_dir)[0])
+                        import tarfile
+                        with tarfile.open(tar_file, 'r') as tar:
+                            files = tar.getnames()
+                        shutil.rmtree(temp_dir)
+                    else:
+                        import tarfile
+                        with tarfile.open(file_path, 'r') as tar:
+                            files = tar.getnames()
+                except Exception as e:
+                    if "Bad password" in str(e) or "password" in str(e).lower():
+                        pwd2 = self._get_password_with_validation(file_path, retry=True)
+                        if pwd2 is None:
+                            return
+                        password = pwd2
+                        temp_dir = os.path.join(os.path.dirname(file_path), "_temp_tar_view")
+                        os.makedirs(temp_dir, exist_ok=True)
+                        with pyzipper.AESZipFile(file_path, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            zf.extractall(temp_dir)
+                        tar_file = os.path.join(temp_dir, os.listdir(temp_dir)[0])
+                        import tarfile
+                        with tarfile.open(tar_file, 'r') as tar:
+                            files = tar.getnames()
+                        shutil.rmtree(temp_dir)
+                    else:
+                        raise e
+                
+                self._create_archive_view_window(file_path, files, password)
+                return
             
-            ctk.CTkButton(win, text="извлечь все", command=lambda: self.extract_all_from_view(file_path, win)).pack(pady=5)
+            # ===== 6. НЕПОДДЕРЖИВАЕМЫЙ ФОРМАТ =====
+            messagebox.showerror("ошибка", "формат не поддерживается")
+            
         except Exception as e:
-            messagebox.showerror("ошибка", str(e))
-    
+            messagebox.showerror("ошибка", f"не удалось открыть архив: {str(e)}")  
+  
+    def _create_archive_view_window(self, file_path, files, password):
+        """Создание окна просмотра содержимого архива"""
+        win = ctk.CTkToplevel(self)
+        win.title(f"содержимое {os.path.basename(file_path)}")
+        win.geometry("600x500")
+        
+        # НАСТРОЙКИ ОКНА
+        win.attributes("-topmost", True)
+        win.focus_force()
+        win.grab_set()
+        
+        # ПРИ ЗАКРЫТИИ — ПРОСТО ЗАКРЫВАЕМ ОКНО, НИЧЕГО НЕ ВОЗВРАЩАЕМ
+        def on_close():
+            win.grab_release()
+            win.destroy()
+            # НЕ ВЫЗЫВАЕМ self.deiconify() — главное окно остаётся как было
+        
+        win.protocol("WM_DELETE_WINDOW", on_close)
+        
+        # ===== СПИСОК ФАЙЛОВ =====
+        list_frame = ctk.CTkScrollableFrame(win, fg_color="transparent")
+        list_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        check_vars = []
+        
+        for i, f in enumerate(files):
+            var = ctk.BooleanVar(value=False)
+            check_vars.append(var)
+            cb = ctk.CTkCheckBox(list_frame, text=f, variable=var, font=("Arial", 11))
+            cb.pack(anchor="w", pady=2)
+        
+        # ===== КНОПКИ =====
+        btn_frame = ctk.CTkFrame(win, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=10, pady=10)
+        
+        ctk.CTkButton(btn_frame, text="✅ извлечь выбранные", width=150, height=30, 
+                    command=lambda: self._extract_selected_from_view(file_path, files, check_vars, win, password)).pack(side="left", padx=5)
+        
+        ctk.CTkButton(btn_frame, text="📦 извлечь все", width=130, height=30,
+                    command=lambda: self._extract_all_from_view(file_path, win, password)).pack(side="left", padx=5)
+        
+        ctk.CTkButton(btn_frame, text="🗑 удалить выбранные", width=150, height=30,
+                    command=lambda: self._delete_selected_from_view(file_path, files, check_vars, win, password)).pack(side="left", padx=5)
+        
+        ctk.CTkButton(btn_frame, text="➕ добавить в архив", width=150, height=30,
+                    command=lambda: self._add_files_to_archive_view(file_path, win, password)).pack(side="left", padx=5)
+        
+        select_all_btn = ctk.CTkButton(btn_frame, text="☑ выбрать все", width=120, height=30,
+                                    command=lambda: self._toggle_all_checkboxes(check_vars, select_all_btn))
+        select_all_btn.pack(side="left", padx=5)
+        
+        # ===== СОХРАНЯЕМ ПАРОЛЬ =====
+        if password and self.settings.get("save_password", False):
+            self.settings["last_password"] = password
+            self.save_settings()
+        
+        self._view_files = files
+        self._view_file_path = file_path
+        self._view_password = password  
+    def _add_files_to_archive_view(self, file_path, win, password):
+        """Добавить файлы в существующий архив"""
+        files_to_add = filedialog.askopenfilenames(title="выберите файлы для добавления в архив")
+        if not files_to_add:
+            return
+        
+        if not messagebox.askyesno("подтверждение", f"добавить {len(files_to_add)} файлов в архив?"):
+            return
+        
+        try:
+            # 1. ИЗВЛЕКАЕМ ВСЁ ВО ВРЕМЕННУЮ ПАПКУ
+            temp_dir = os.path.join(os.path.dirname(file_path), "_temp_add")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            # ИЗВЛЕКАЕМ АРХИВ
+            self._extract_archive_to_temp(file_path, temp_dir, password)
+            
+            # 2. КОПИРУЕМ НОВЫЕ ФАЙЛЫ
+            for f in files_to_add:
+                if os.path.isdir(f):
+                    shutil.copytree(f, os.path.join(temp_dir, os.path.basename(f)))
+                else:
+                    shutil.copy2(f, temp_dir)
+            
+            # 3. ПЕРЕСОЗДАЁМ АРХИВ
+            self._create_archive_from_temp(file_path, temp_dir, password)
+            
+            # 4. УДАЛЯЕМ ВРЕМЕННУЮ ПАПКУ
+            shutil.rmtree(temp_dir)
+            
+            # 5. ОБНОВЛЯЕМ ОКНО
+            messagebox.showinfo("готово", f"добавлено {len(files_to_add)} файлов")
+            win.destroy()
+            
+            # ОТКРЫВАЕМ ЗАНОВО ОБНОВЛЁННЫЙ АРХИВ
+            self.view_archive_file(file_path)
+            
+        except Exception as e:
+            messagebox.showerror("ошибка", str(e))    
     def extract_all_from_view(self, file_path, win):
         dest = filedialog.askdirectory()
         if not dest:
             return
         try:
+            password = None
+            saved_pwd = self.settings.get("last_password", "")
+            if self.settings.get("save_password", False) and saved_pwd:
+                password = saved_pwd
+            
             if file_path.endswith('.aln'):
                 with open(file_path, 'rb') as f:
                     data = f.read()
@@ -590,12 +999,52 @@ class AlanatorApp(ctk.CTk):
                     temp_zip = file_path.replace('.aln', '_temp.zip')
                     with open(temp_zip, 'wb') as zf:
                         zf.write(data[zip_start:])
+                if password:
+                    with pyzipper.AESZipFile(temp_zip, 'r') as zf:
+                        zf.setpassword(password.encode('utf-8'))
+                        zf.extractall(dest)
+                else:
                     with zipfile.ZipFile(temp_zip, 'r') as zf:
                         zf.extractall(dest)
-                    os.remove(temp_zip)
+                os.remove(temp_zip)
+            
+            elif file_path.endswith('.zip'):
+                if password:
+                    with pyzipper.AESZipFile(file_path, 'r') as zf:
+                        zf.setpassword(password.encode('utf-8'))
+                        zf.extractall(dest)
+                else:
+                    with zipfile.ZipFile(file_path, 'r') as zf:
+                        zf.extractall(dest)
+            
+            elif file_path.endswith('.tar'):
+                if password:
+                    temp_dir = os.path.join(os.path.dirname(file_path), "_temp_tar_extract")
+                    os.makedirs(temp_dir, exist_ok=True)
+                    with pyzipper.AESZipFile(file_path, 'r') as zf:
+                        zf.setpassword(password.encode('utf-8'))
+                        zf.extractall(temp_dir)
+                    tar_file = os.path.join(temp_dir, os.listdir(temp_dir)[0])
+                    import tarfile
+                    with tarfile.open(tar_file, 'r') as tar:
+                        tar.extractall(dest)
+                    shutil.rmtree(temp_dir)
+                else:
+                    import tarfile
+                    with tarfile.open(file_path, 'r') as tar:
+                        tar.extractall(dest)
+            
+            elif file_path.endswith('.7z'):
+                if password:
+                    with py7zr.SevenZipFile(file_path, 'r', password=password) as archive:
+                        archive.extractall(dest)
+                else:
+                    with py7zr.SevenZipFile(file_path, 'r') as archive:
+                        archive.extractall(dest)
+            
             else:
-                with zipfile.ZipFile(file_path, 'r') as zf:
-                    zf.extractall(dest)
+                shutil.unpack_archive(file_path, dest)
+            
             messagebox.showinfo("готово", f"архив извлечён в {dest}")
             win.destroy()
         except Exception as e:
@@ -808,6 +1257,8 @@ class AlanatorApp(ctk.CTk):
             file_data.sort(key=lambda x: (not x['is_dir'], x['ext'], x['name'].lower()))
         elif sort_by == "date":
             file_data.sort(key=lambda x: (not x['is_dir'], x['mtime']), reverse=True)
+        elif sort_by == "ext":
+            file_data.sort(key=lambda x: (not x['is_dir'], x['ext'], x['name'].lower()))
         
         for item in self.tree_files.get_children():
             self.tree_files.delete(item)
@@ -819,10 +1270,6 @@ class AlanatorApp(ctk.CTk):
                 self.tree_files.insert("", "end", values=(data['name'], self.get_file_size(data['path'])))
     
     def do_archive_full(self, target, arch_type, level, func, split, delete_source, separate, tar_first, password, win):
-        print(f"текущий путь: {self.current_path}")
-        print(f"целевая папка: {target}")
-        print(f"пароль: {'установлен' if password else 'не установлен'}")
-        
         if not os.path.exists(target):
             messagebox.showerror("ошибка", f"папка не найдена: {target}")
             return
@@ -833,15 +1280,12 @@ class AlanatorApp(ctk.CTk):
         
         files = [os.path.join(self.current_path, f) for f in os.listdir(self.current_path) if os.path.isfile(os.path.join(self.current_path, f))]
         
-        print(f"найдено файлов: {len(files)}")
-        
         if not files:
             messagebox.showerror("ошибка", f"нет файлов для архивации в {self.current_path}")
             return
         
         ext = f".{arch_type}"
         arch_path = os.path.join(target, f"alanator_backup{ext}")
-        print(f"путь к архиву: {arch_path}")
         
         try:
             if arch_type == "zip":
@@ -849,29 +1293,19 @@ class AlanatorApp(ctk.CTk):
                 if level == "Очень быстро":
                     compress = zipfile.ZIP_STORED
                 
-                if password:
-                    with pyzipper.AESZipFile(arch_path, 'w', compression=compress, encryption=pyzipper.WZ_AES) as zf:
-                        zf.setpassword(password.encode('utf-8'))
-                        for f in files:
-                            zf.write(f, os.path.basename(f))
-                    print("зашифрованный zip создан")
-                else:
-                    with zipfile.ZipFile(arch_path, 'w', compress, allowZip64=True) as zf:
-                        for f in files:
-                            zf.write(f, os.path.basename(f))
-                    print("zip создан успешно")
+                with zipfile.ZipFile(arch_path, 'w', compress, allowZip64=True) as zf:
+                    for f in files:
+                        zf.write(f, os.path.basename(f))
             
             elif arch_type == "7z":
                 if password:
-                    with py7zr.SevenZipFile(arch_path, 'w', password=password) as archive:
+                    with py7zr.SevenZipFile(arch_path, 'w', password=password, header_encryption=True) as archive:
                         for f in files:
                             archive.write(f, os.path.basename(f))
-                    print("зашифрованный 7z создан")
                 else:
                     with py7zr.SevenZipFile(arch_path, 'w') as archive:
                         for f in files:
                             archive.write(f, os.path.basename(f))
-                    print("7z создан успешно")
             
             elif arch_type == "tar":
                 import tarfile
@@ -884,12 +1318,10 @@ class AlanatorApp(ctk.CTk):
                         zf.setpassword(password.encode('utf-8'))
                         zf.write(temp_tar, os.path.basename(temp_tar))
                     os.remove(temp_tar)
-                    print("зашифрованный tar (в zip) создан")
                 else:
                     with tarfile.open(arch_path, 'w') as tar:
                         for f in files:
                             tar.add(f, arcname=os.path.basename(f))
-                    print("tar создан успешно")
             
             elif arch_type == "aln":
                 if password:
@@ -900,10 +1332,8 @@ class AlanatorApp(ctk.CTk):
                             zf.write(f, os.path.basename(f))
                     arch_path = self.create_aln_archive_from_zip(target, temp_zip, password)
                     os.remove(temp_zip)
-                    print("зашифрованный aln создан")
                 else:
                     arch_path = self.create_aln_archive(target, files, password, None)
-                    print("aln создан успешно")
             
             if delete_source:
                 for f in files:
@@ -917,7 +1347,6 @@ class AlanatorApp(ctk.CTk):
             self.refresh_files()
         
         except Exception as e:
-            print(f"ошибка: {e}")
             messagebox.showerror(tr("error"), str(e))
     
     def create_aln_archive_from_zip(self, target, temp_zip, password):
@@ -970,9 +1399,25 @@ class AlanatorApp(ctk.CTk):
             return
         
         password = None
-        pwd = ctk.CTkInputDialog(text="введите пароль (если есть):", title="пароль").get_input()
-        if pwd:
-            password = pwd
+        saved_pwd = self.settings.get("last_password", "")
+        if self.settings.get("save_password", False) and saved_pwd:
+            if messagebox.askyesno("Пароль", f"Использовать сохранённый пароль?"):
+                password = saved_pwd
+            else:
+                pwd = ctk.CTkInputDialog(text="введите пароль:", title="пароль").get_input()
+                if pwd is not None:
+                    password = pwd
+                else:
+                    return
+        else:
+            pwd = ctk.CTkInputDialog(text="введите пароль:", title="пароль").get_input()
+            if pwd is not None:
+                password = pwd
+                if self.settings.get("save_password", False):
+                    self.settings["last_password"] = password
+                    self.save_settings()
+            else:
+                return
         
         dest = filedialog.askdirectory()
         if not dest:
@@ -1183,6 +1628,13 @@ class AlanatorApp(ctk.CTk):
         btn_extract = ctk.CTkButton(toolbar, text=tr("extract"), width=80, height=35, fg_color="gray30", hover_color="gray40", command=self.extract_archive).pack(side="left", padx=4, pady=5)
         btn_test = ctk.CTkButton(toolbar, text=tr("test"), width=80, height=35, fg_color="gray30", hover_color="gray40", command=self.test_archive).pack(side="left", padx=4, pady=5)
         btn_delete = ctk.CTkButton(toolbar, text=tr("secure_delete"), width=130, height=35, fg_color="gray30", hover_color="gray40", command=self.secure_delete).pack(side="left", padx=4, pady=5)
+        
+        ctk.CTkLabel(toolbar, text="  |  Сорт:", font=("Arial", 11)).pack(side="left", padx=4, pady=5)
+        ctk.CTkButton(toolbar, text="Имя", width=40, height=30, fg_color="gray30", hover_color="gray40", command=lambda: self.sort_files("name")).pack(side="left", padx=2, pady=5)
+        ctk.CTkButton(toolbar, text="Разм", width=40, height=30, fg_color="gray30", hover_color="gray40", command=lambda: self.sort_files("size")).pack(side="left", padx=2, pady=5)
+        ctk.CTkButton(toolbar, text="Тип", width=40, height=30, fg_color="gray30", hover_color="gray40", command=lambda: self.sort_files("type")).pack(side="left", padx=2, pady=5)
+        ctk.CTkButton(toolbar, text="Дата", width=40, height=30, fg_color="gray30", hover_color="gray40", command=lambda: self.sort_files("date")).pack(side="left", padx=2, pady=5)
+        ctk.CTkButton(toolbar, text="Расш", width=40, height=30, fg_color="gray30", hover_color="gray40", command=lambda: self.sort_files("ext")).pack(side="left", padx=2, pady=5)
     
     def create_main_area(self):
         main_panel = ctk.CTkFrame(self)
@@ -1239,13 +1691,15 @@ class AlanatorApp(ctk.CTk):
         item = self.tree_files.identify_row(event.y)
         if not item:
             return
+        for item_ in self.tree_files.get_children():
+            self.tree_files.selection_remove(item_)
         self.tree_files.selection_set(item)
         name = self.tree_files.item(item, "values")[0]
-        clean_name = name.replace("📁 ", "").replace("📄 ", "")
+        clean_name = name.replace("📁 ", "").replace("📄 ", "").replace("💾 ", "")
         full_path = os.path.join(self.current_path, clean_name)
         
         menu = Menu(self, tearoff=0)
-        menu.add_command(label=tr("open"), command=lambda: os.startfile(full_path) if os.path.exists(full_path) else None)
+        menu.add_command(label=tr("open"), command=lambda: self._open_file(full_path))
         menu.add_separator()
         
         if full_path.endswith('.bat') and os.path.isfile(full_path):
@@ -1262,39 +1716,20 @@ class AlanatorApp(ctk.CTk):
         
         nav_menu = Menu(menu, tearoff=0)
         nav_menu.add_command(label="Обзор пути", command=lambda: self.quick_open(os.path.dirname(full_path) if os.path.isfile(full_path) else full_path))
-        nav_menu.add_command(label="Открыть командную строку", command=lambda: os.system(f"start cmd /k cd \"{self.current_path}\""))
-        nav_menu.add_command(label="Открыть PowerShell", command=lambda: os.system(f"start powershell -NoExit -Command \"cd '{self.current_path}'\""))
+        nav_menu.add_command(label="Открыть командную строку", command=lambda: self._open_cmd(self.current_path))
+        nav_menu.add_command(label="Открыть PowerShell", command=lambda: self._open_powershell(self.current_path))
         menu.add_cascade(label="Навигация", menu=nav_menu)
         
         sort_menu = Menu(menu, tearoff=0)
-        sort_menu.add_command(label=tr("by_name"), command=self.refresh_files)
-        sort_menu.add_command(label=tr("by_size"), command=lambda: messagebox.showinfo("сортировка", "будет в следующей версии"))
-        menu.add_cascade(label="Сортировать по", menu=sort_menu)
+        sort_menu.add_command(label=tr("by_name"), command=lambda: self.sort_files("name"))
+        sort_menu.add_command(label=tr("by_size"), command=lambda: self.sort_files("size"))
+        sort_menu.add_command(label=tr("by_type"), command=lambda: self.sort_files("type"))
+        sort_menu.add_command(label=tr("by_date"), command=lambda: self.sort_files("date"))
+        sort_menu.add_command(label="По расширению", command=lambda: self.sort_files("ext"))
+        menu.add_cascade(label="Сортировать", menu=sort_menu)
         
         menu.add_command(label=tr("select_all"), command=self.select_all_files)
         menu.add_command(label=tr("refresh"), command=self.refresh_files)
-        menu.add_separator()
-        
-        menu.add_command(label="Открыть с помощью...", command=lambda: os.startfile(full_path) if os.path.exists(full_path) else None)
-        menu.add_separator()
-        
-        file_menu = Menu(menu, tearoff=0)
-        file_menu.add_command(label=tr("copy"), command=self.copy_file)
-        file_menu.add_command(label=tr("rename"), command=self.rename_file)
-        file_menu.add_command(label=tr("delete"), command=self.delete_file)
-        menu.add_cascade(label="Менеджер файлов", menu=file_menu)
-        
-        tools_menu = Menu(menu, tearoff=0)
-        tools_menu.add_command(label=tr("test"), command=self.test_archive)
-        tools_menu.add_command(label=tr("secure_delete"), command=self.secure_delete_selected)
-        menu.add_cascade(label="Файловые инструменты", menu=tools_menu)
-        
-        func_menu = Menu(menu, tearoff=0)
-        func_menu.add_command(label="Поиск в интернете", command=lambda: os.system(f"start https://www.google.com/search?q={clean_name}"))
-        func_menu.add_command(label="Обзор пути", command=lambda: self.quick_open(self.current_path))
-        func_menu.add_command(label=tr("properties"), command=self.show_properties)
-        menu.add_cascade(label="Функции", menu=func_menu)
-        
         menu.add_separator()
         menu.add_command(label=tr("properties"), command=self.show_properties)
         
@@ -1305,73 +1740,198 @@ class AlanatorApp(ctk.CTk):
         if item:
             return
         menu = Menu(self, tearoff=0)
-        menu.add_command(label=tr("new_folder"), command=self.new_folder)
+        menu.add_command(label=tr("refresh"), command=self.refresh_files)
         menu.add_separator()
+        menu.add_command(label=tr("new_folder"), command=self.new_folder)
         menu.add_command(label=tr("paste"), command=self.paste_file)
         menu.add_separator()
-        menu.add_command(label=tr("refresh"), command=self.refresh_files)
+        menu.add_command(label="Загрузить файлы", command=self.upload_files_to_current_dir)
+        menu.add_command(label="Загрузить папку", command=self.upload_folder_to_current_dir)
+        menu.add_separator()
+        menu.add_command(label="Открыть в проводнике", command=lambda: os.startfile(self.current_path) if self.current_path != "Computer" else None)
+        menu.add_command(label="Открыть командную строку", command=lambda: self._open_cmd(self.current_path))
+        menu.add_command(label="Открыть PowerShell", command=lambda: self._open_powershell(self.current_path))
+        menu.add_separator()
         menu.add_command(label=tr("properties"), command=self.show_folder_properties)
         menu.post(event.x_root, event.y_root)
     
-    def show_folder_properties(self):
-        if os.path.exists(self.current_path):
-            info = f"папка: {self.current_path}\n"
-            try:
-                items = os.listdir(self.current_path)
-                files = [f for f in items if os.path.isfile(os.path.join(self.current_path, f))]
-                folders = [f for f in items if os.path.isdir(os.path.join(self.current_path, f))]
-                info += f"файлов: {len(files)}\n"
-                info += f"папок: {len(folders)}"
-            except:
-                info += "не удалось получить информацию"
-            messagebox.showinfo(tr("properties"), info)
+    def _open_file(self, path):
+        try:
+            os.startfile(path)
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть файл: {e}")
     
-    def secure_delete_selected(self):
-        selection = self.tree_files.selection()
-        if selection:
-            name = self.tree_files.item(selection[0], "values")[0].replace("📁 ", "").replace("📄 ", "")
-            full_path = os.path.join(self.current_path, name)
-            if messagebox.askyesno("внимание", f"безвозвратно удалить {name}?"):
+    def _open_cmd(self, path):
+        try:
+            os.system(f'start cmd /k cd "{path}"')
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть CMD: {e}")
+    
+    def _open_powershell(self, path):
+        try:
+            os.system(f'start powershell -NoExit -Command "cd \'{path}\'"')
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть PowerShell: {e}")
+    
+    def upload_files_to_current_dir(self):
+        if self.current_path == "Computer":
+            messagebox.showwarning("Внимание", "Выберите папку для загрузки")
+            return
+        files = filedialog.askopenfilenames(title="Выберите файлы для копирования")
+        if files:
+            for f in files:
                 try:
-                    if os.path.isfile(full_path):
-                        size = os.path.getsize(full_path)
-                        with open(full_path, "wb") as f:
-                            for _ in range(3):
-                                f.seek(0)
-                                f.write(os.urandom(size))
-                                f.flush()
-                    os.remove(full_path)
-                    messagebox.showinfo("готово", f"{name} удалён без возможности восстановления")
-                    self.refresh_files()
+                    dest = os.path.join(self.current_path, os.path.basename(f))
+                    if os.path.exists(dest):
+                        if not messagebox.askyesno("Подтверждение", f"Файл {os.path.basename(f)} уже существует. Заменить?"):
+                            continue
+                    shutil.copy2(f, self.current_path)
                 except Exception as e:
-                    messagebox.showerror("ошибка", str(e))
+                    messagebox.showerror("Ошибка", f"Не удалось скопировать {os.path.basename(f)}: {e}")
+            self.refresh_files()
+            self.update_status(f"Скопировано {len(files)} файлов")
     
-    def show_properties(self):
+    def upload_folder_to_current_dir(self):
+        if self.current_path == "Computer":
+            messagebox.showwarning("Внимание", "Выберите папку для загрузки")
+            return
+        folder = filedialog.askdirectory(title="Выберите папку для копирования")
+        if folder:
+            try:
+                dest = os.path.join(self.current_path, os.path.basename(folder))
+                if os.path.exists(dest):
+                    if not messagebox.askyesno("Подтверждение", f"Папка {os.path.basename(folder)} уже существует. Заменить?"):
+                        return
+                shutil.copytree(folder, dest)
+                self.refresh_files()
+                self.update_status(f"Папка скопирована: {os.path.basename(folder)}")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось скопировать папку: {e}")
+    
+    def show_folder_properties(self):
+        if self.current_path == "Computer":
+            messagebox.showinfo("Свойства", "Мой компьютер")
+            return
+        if not os.path.exists(self.current_path):
+            messagebox.showerror("Ошибка", "Папка не существует")
+            return
+        info = f"Папка: {self.current_path}\n\n"
+        try:
+            items = os.listdir(self.current_path)
+            files = [f for f in items if os.path.isfile(os.path.join(self.current_path, f))]
+            folders = [f for f in items if os.path.isdir(os.path.join(self.current_path, f))]
+            total_size = 0
+            for f in files:
+                try:
+                    total_size += os.path.getsize(os.path.join(self.current_path, f))
+                except:
+                    pass
+            info += f"Файлов: {len(files)}\n"
+            info += f"Папок: {len(folders)}\n"
+            info += f"Общий размер: {self._format_size(total_size)}"
+        except Exception as e:
+            info += f"Ошибка: {e}"
+        messagebox.showinfo("Свойства папки", info)
+    
+    def _format_size(self, size):
+        if size < 1024:
+            return f"{size} B"
+        elif size < 1024**2:
+            return f"{size/1024:.1f} KB"
+        elif size < 1024**3:
+            return f"{size/1024**2:.1f} MB"
+        else:
+            return f"{size/1024**3:.2f} GB"
+    
+    def on_file_click(self, event):
         selection = self.tree_files.selection()
-        if selection:
-            name = self.tree_files.item(selection[0], "values")[0].replace("📁 ", "").replace("📄 ", "")
-            full_path = os.path.join(self.current_path, name)
-            if os.path.exists(full_path):
-                info = f"имя: {name}\n"
-                info += f"путь: {full_path}\n"
-                if os.path.isfile(full_path):
-                    info += f"размер: {self.get_file_size(full_path)}\n"
-                try:
-                    creation_time = os.path.getctime(full_path)
-                    info += f"создан: {time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(creation_time))}\n"
-                except:
-                    info += "создан: неизвестно\n"
-                try:
-                    mod_time = os.path.getmtime(full_path)
-                    info += f"изменён: {time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(mod_time))}\n"
-                except:
-                    info += "изменён: неизвестно\n"
-                try:
-                    access_time = os.path.getatime(full_path)
-                    info += f"открыт: {time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(access_time))}"
-                except:
-                    info += "открыт: неизвестно"
-                messagebox.showinfo(tr("properties"), info)
+        if not selection:
+            return
+        name = self.tree_files.item(selection[0], "values")[0]
+        clean_name = name.replace("📁 ", "").replace("📄 ", "").replace("💾 ", "")
+        full_path = os.path.join(self.current_path, clean_name)
+        
+        if os.path.isdir(full_path):
+            self.current_path = full_path
+            self.refresh_files()
+        elif os.path.isfile(full_path):
+            try:
+                os.startfile(full_path)
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось открыть файл: {e}")
+    
+    def on_tree_click(self, event):
+        item = self.tree.focus()
+        if not item:
+            return
+        text = self.tree.item(item, "text")
+        if ":" in text:
+            self.current_path = text
+            self.refresh_files()
+        elif text == "Мой компьютер":
+            self.current_path = "Computer"
+            self.refresh_files()
+        else:
+            parts = []
+            i = item
+            while i:
+                txt = self.tree.item(i, "text")
+                if txt == "Мой компьютер":
+                    break
+                parts.insert(0, txt)
+                i = self.tree.parent(i)
+            if parts:
+                if ":" in parts[0]:
+                    self.current_path = "".join(parts)
+                else:
+                    self.current_path = "C:/" + "/".join(parts)
+                self.refresh_files()
+    
+    def refresh_files(self):
+        for item in self.tree_files.get_children():
+            self.tree_files.delete(item)
+        self.path_label.configure(text=f"путь: {self.current_path}")
+        self.update_status(f"Просмотр: {self.current_path}")
+        try:
+            if self.current_path == "Computer":
+                for drive in self.get_drives_info():
+                    name = f"💾 {drive['name']}"
+                    info = f"{drive['free']} свободно из {drive['size']}"
+                    self.tree_files.insert("", "end", values=(name, info))
+                return
+            
+            if os.path.exists(self.current_path):
+                items = os.listdir(self.current_path)
+                for item in sorted(items):
+                    full_path = os.path.join(self.current_path, item)
+                    if os.path.isdir(full_path):
+                        self.tree_files.insert("", "end", values=(f"📁 {item}", ""))
+                    else:
+                        try:
+                            self.tree_files.insert("", "end", values=(item, self.get_file_size(full_path)))
+                        except:
+                            self.tree_files.insert("", "end", values=(item, "ошибка"))
+            else:
+                if self.current_path.endswith(":\\") and not os.path.exists(self.current_path):
+                    self.tree_files.insert("", "end", values=(f"❌ Диск недоступен: {self.current_path}", ""))
+                else:
+                    self.tree_files.insert("", "end", values=(f"❌ Папка не существует: {self.current_path}", ""))
+        except Exception as e:
+            self.tree_files.insert("", "end", values=(f"Ошибка: {e}", ""))
+            self.update_status("Ошибка при обновлении")
+    
+    def refresh_tree(self):
+        self.tree.delete(*self.tree.get_children())
+        comp = self.tree.insert("", "end", text="Мой компьютер", open=True)
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            if os.path.exists(f"{letter}:\\"):
+                self.tree.insert(comp, "end", text=f"{letter}:\\")
+        user = self.tree.insert(comp, "end", text="Пользователь")
+        home = os.path.expanduser("~")
+        for name in ["Desktop", "Documents", "Downloads", "Music", "Videos", "Pictures"]:
+            p = os.path.join(home, name)
+            if os.path.exists(p):
+                self.tree.insert(user, "end", text=name)
     
     def get_bookmark_path(self, name):
         if name == "Computer's root":
@@ -1428,89 +1988,6 @@ class AlanatorApp(ctk.CTk):
             return "ошибка"
         return ""
     
-    def refresh_files(self):
-        for item in self.tree_files.get_children():
-            self.tree_files.delete(item)
-        self.path_label.configure(text=f"путь: {self.current_path}")
-        try:
-            if self.current_path == "Computer":
-                for drive in self.get_drives_info():
-                    name = f"💾 {drive['name']}"
-                    info = f"{drive['free']} свободно из {drive['size']}"
-                    self.tree_files.insert("", "end", values=(name, info))
-                return
-            
-            if os.path.exists(self.current_path):
-                items = os.listdir(self.current_path)
-                for item in sorted(items):
-                    full_path = os.path.join(self.current_path, item)
-                    if os.path.isdir(full_path):
-                        self.tree_files.insert("", "end", values=(f"📁 {item}", ""))
-                    else:
-                        self.tree_files.insert("", "end", values=(item, self.get_file_size(full_path)))
-        except Exception as e:
-            self.tree_files.insert("", "end", values=(f"ошибка: {e}", ""))
-    
-    def refresh_tree(self):
-        self.tree.delete(*self.tree.get_children())
-        comp = self.tree.insert("", "end", text="Мой компьютер", open=True)
-        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-            if os.path.exists(f"{letter}:\\"):
-                self.tree.insert(comp, "end", text=f"{letter}:\\")
-        user = self.tree.insert(comp, "end", text="Пользователь")
-        home = os.path.expanduser("~")
-        for name in ["Desktop", "Documents", "Downloads", "Music", "Videos", "Pictures"]:
-            p = os.path.join(home, name)
-            if os.path.exists(p):
-                self.tree.insert(user, "end", text=name)
-    
-    def on_tree_click(self, event):
-        item = self.tree.focus()
-        if not item:
-            return
-        text = self.tree.item(item, "text")
-        if ":" in text:
-            self.current_path = text
-            self.refresh_files()
-        elif text == "Мой компьютер":
-            self.current_path = "Computer"
-            self.refresh_files()
-        else:
-            parts = []
-            i = item
-            while i:
-                txt = self.tree.item(i, "text")
-                if txt == "Мой компьютер":
-                    break
-                parts.insert(0, txt)
-                i = self.tree.parent(i)
-            if parts:
-                if ":" in parts[0]:
-                    self.current_path = "".join(parts)
-                else:
-                    self.current_path = "C:/" + "/".join(parts)
-                self.refresh_files()
-    
-    def on_file_click(self, event):
-        selection = self.tree_files.selection()
-        if not selection:
-            return
-        name = self.tree_files.item(selection[0], "values")[0]
-        if name.startswith("📁"):
-            folder = name.replace("📁 ", "")
-            new_path = os.path.join(self.current_path, folder)
-            if os.path.isdir(new_path):
-                self.current_path = new_path
-                self.refresh_files()
-        elif name.startswith("💾") or (len(name) == 3 and name[1] == ":"):
-            disk = name.replace("💾 ", "") if name.startswith("💾") else name
-            self.current_path = disk
-            self.refresh_files()
-        elif self.current_path != "Computer":
-            full_path = os.path.join(self.current_path, name)
-            if os.path.isfile(full_path):
-                os.startfile(full_path)
-    
     def go_back(self):
         if self.current_path == "Computer":
             return
@@ -1531,7 +2008,281 @@ class AlanatorApp(ctk.CTk):
     def select_all_files(self):
         for item in self.tree_files.get_children():
             self.tree_files.selection_add(item)
+    
+    def show_properties(self):
+        selection = self.tree_files.selection()
+        if selection:
+            name = self.tree_files.item(selection[0], "values")[0].replace("📁 ", "").replace("📄 ", "")
+            full_path = os.path.join(self.current_path, name)
+            if os.path.exists(full_path):
+                info = f"имя: {name}\n"
+                info += f"путь: {full_path}\n"
+                if os.path.isfile(full_path):
+                    info += f"размер: {self.get_file_size(full_path)}\n"
+                try:
+                    creation_time = os.path.getctime(full_path)
+                    info += f"создан: {time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(creation_time))}\n"
+                except:
+                    info += "создан: неизвестно\n"
+                try:
+                    mod_time = os.path.getmtime(full_path)
+                    info += f"изменён: {time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(mod_time))}\n"
+                except:
+                    info += "изменён: неизвестно\n"
+                try:
+                    access_time = os.path.getatime(full_path)
+                    info += f"открыт: {time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(access_time))}"
+                except:
+                    info += "открыт: неизвестно"
+                messagebox.showinfo(tr("properties"), info)
+    def _toggle_all_checkboxes(self, check_vars, btn):
+        """Выбрать все / Снять все"""
+        # Проверяем, все ли выбраны
+        all_checked = all(v.get() for v in check_vars)
+        
+        for var in check_vars:
+            var.set(not all_checked)
+        
+        btn.configure(text="☐ Снять все" if not all_checked else "☑ Выбрать все")
 
+    def _extract_selected_from_view(self, file_path, files, check_vars, win, password):
+        """Извлечь выбранные файлы"""
+        selected = [files[i] for i, v in enumerate(check_vars) if v.get()]
+        
+        if not selected:
+            messagebox.showwarning("внимание", "не выбрано ни одного файла")
+            return
+        
+        dest = filedialog.askdirectory()
+        if not dest:
+            return
+        
+        try:
+            # Извлекаем все файлы во временную папку, потом копируем выбранные
+            temp_dir = os.path.join(os.path.dirname(file_path), "_temp_extract")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            self._extract_archive_to_temp(file_path, temp_dir, password)
+            
+            # Копируем выбранные файлы
+            for f in selected:
+                src = os.path.join(temp_dir, f)
+                if os.path.exists(src):
+                    dst = os.path.join(dest, os.path.basename(f))
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst)
+                    else:
+                        shutil.copy2(src, dst)
+            
+            shutil.rmtree(temp_dir)
+            messagebox.showinfo("готово", f"извлечено {len(selected)} файлов")
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("ошибка", str(e))
+
+    def _extract_all_from_view(self, file_path, win, password):
+        """Извлечь все файлы"""
+        dest = filedialog.askdirectory()
+        if not dest:
+            return
+        
+        try:
+            temp_dir = os.path.join(os.path.dirname(file_path), "_temp_extract")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            self._extract_archive_to_temp(file_path, temp_dir, password)
+            
+            # Копируем всё
+            for item in os.listdir(temp_dir):
+                src = os.path.join(temp_dir, item)
+                dst = os.path.join(dest, item)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+            
+            shutil.rmtree(temp_dir)
+            messagebox.showinfo("готово", "все файлы извлечены")
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("ошибка", str(e))
+
+    def _delete_selected_from_view(self, file_path, files, check_vars, win, password):
+        """Удалить выбранные файлы из архива"""
+        selected = [files[i] for i, v in enumerate(check_vars) if v.get()]
+        
+        if not selected:
+            messagebox.showwarning("внимание", "не выбрано ни одного файла")
+            return
+        
+        if not messagebox.askyesno("подтверждение", f"удалить {len(selected)} файлов из архива?"):
+            return
+        
+        try:
+            temp_dir = os.path.join(os.path.dirname(file_path), "_temp_delete")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            # Извлекаем все файлы
+            self._extract_archive_to_temp(file_path, temp_dir, password)
+            
+            # Удаляем выбранные
+            for f in selected:
+                path = os.path.join(temp_dir, f)
+                if os.path.exists(path):
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                    else:
+                        os.remove(path)
+            
+            # Создаём новый архив без удалённых файлов
+            self._create_archive_from_temp(file_path, temp_dir, password)
+            
+            shutil.rmtree(temp_dir)
+            messagebox.showinfo("готово", f"удалено {len(selected)} файлов")
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("ошибка", str(e))
+
+    def _delete_all_from_view(self, file_path, files, win, password):
+        """Удалить все файлы из архива"""
+        if not messagebox.askyesno("подтверждение", f"удалить все {len(files)} файлов из архива?"):
+            return
+        
+        try:
+            # Просто удаляем архив
+            os.remove(file_path)
+            messagebox.showinfo("готово", "архив удалён")
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("ошибка", str(e))
+
+    def _extract_archive_to_temp(self, file_path, temp_dir, password):
+                """Извлечение архива во временную папку"""
+                if file_path.endswith('.aln'):
+                    with open(file_path, 'rb') as f:
+                        data = f.read()
+                        zip_start = data.find(b'PK')
+                        temp_zip = file_path.replace('.aln', '_temp.zip')
+                        with open(temp_zip, 'wb') as zf:
+                            zf.write(data[zip_start:])
+                    if password:
+                        with pyzipper.AESZipFile(temp_zip, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            zf.extractall(temp_dir)
+                    else:
+                        with zipfile.ZipFile(temp_zip, 'r') as zf:
+                            zf.extractall(temp_dir)
+                    os.remove(temp_zip)
+                
+                elif file_path.endswith('.zip'):
+                    if password:
+                        with pyzipper.AESZipFile(file_path, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            zf.extractall(temp_dir)
+                    else:
+                        with zipfile.ZipFile(file_path, 'r') as zf:
+                            zf.extractall(temp_dir)
+                
+                elif file_path.endswith('.7z'):
+                    if password:
+                        with py7zr.SevenZipFile(file_path, 'r', password=password) as archive:
+                            archive.extractall(temp_dir)
+                    else:
+                        with py7zr.SevenZipFile(file_path, 'r') as archive:
+                            archive.extractall(temp_dir)
+                
+                elif file_path.endswith('.tar'):
+                    import tarfile
+                    if password:
+                        # tar с паролем — это zip-обёртка
+                        temp_zip_dir = os.path.join(os.path.dirname(file_path), "_temp_tar_extract")
+                        os.makedirs(temp_zip_dir, exist_ok=True)
+                        with pyzipper.AESZipFile(file_path, 'r') as zf:
+                            zf.setpassword(password.encode('utf-8'))
+                            zf.extractall(temp_zip_dir)
+                        tar_file = os.path.join(temp_zip_dir, os.listdir(temp_zip_dir)[0])
+                        with tarfile.open(tar_file, 'r') as tar:
+                            tar.extractall(temp_dir)
+                        shutil.rmtree(temp_zip_dir)
+                    else:
+                        with tarfile.open(file_path, 'r') as tar:
+                            tar.extractall(temp_dir)
+
+    def _create_archive_from_temp(self, file_path, temp_dir, password):
+        """Создание архива из временной папки"""
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        # собираем все файлы
+        files = []
+        for root, dirs, filenames in os.walk(temp_dir):
+            for f in filenames:
+                files.append(os.path.join(root, f))
+        
+        if ext == '.zip':
+            with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+                for f in files:
+                    arcname = os.path.relpath(f, temp_dir)
+                    zf.write(f, arcname)
+        
+        elif ext == '.7z':
+            if password:
+                with py7zr.SevenZipFile(file_path, 'w', password=password, header_encryption=True) as archive:
+                    for f in files:
+                        arcname = os.path.relpath(f, temp_dir)
+                        archive.write(f, arcname)
+            else:
+                with py7zr.SevenZipFile(file_path, 'w') as archive:
+                    for f in files:
+                        arcname = os.path.relpath(f, temp_dir)
+                        archive.write(f, arcname)
+        
+        elif ext == '.tar':
+            import tarfile
+            if password:
+                temp_tar = file_path.replace('.tar', '_temp.tar')
+                with tarfile.open(temp_tar, 'w') as tar:
+                    for f in files:
+                        arcname = os.path.relpath(f, temp_dir)
+                        tar.add(f, arcname=arcname)
+                with pyzipper.AESZipFile(file_path, 'w', encryption=pyzipper.WZ_AES) as zf:
+                    zf.setpassword(password.encode('utf-8'))
+                    zf.write(temp_tar, os.path.basename(temp_tar))
+                os.remove(temp_tar)
+            else:
+                with tarfile.open(file_path, 'w') as tar:
+                    for f in files:
+                        arcname = os.path.relpath(f, temp_dir)
+                        tar.add(f, arcname=arcname)
+        
+        elif ext == '.aln':
+            if password:
+                temp_zip = file_path.replace('.aln', '_temp.zip')
+                with pyzipper.AESZipFile(temp_zip, 'w', encryption=pyzipper.WZ_AES) as zf:
+                    zf.setpassword(password.encode('utf-8'))
+                    for f in files:
+                        arcname = os.path.relpath(f, temp_dir)
+                        zf.write(f, arcname)
+                self.create_aln_archive_from_zip(os.path.dirname(file_path), temp_zip, password)
+                os.remove(temp_zip)
+            else:
+                temp_zip = file_path.replace('.aln', '_temp.zip')
+                with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for f in files:
+                        arcname = os.path.relpath(f, temp_dir)
+                        zf.write(f, arcname)
+                with open(file_path, 'wb') as f_out:
+                    f_out.write(b'ALN\x00')
+                    f_out.write(struct.pack('<H', 1))
+                    timestamp = int(time.time())
+                    f_out.write(struct.pack('<Q', timestamp))
+                    f_out.write(struct.pack('<I', len(files)))
+                    f_out.write(b'NOPASS\x00')
+                    with open(temp_zip, 'rb') as zf:
+                        f_out.write(zf.read())
+                os.remove(temp_zip)
 if __name__ == "__main__":
     app = AlanatorApp()
     app.mainloop()
