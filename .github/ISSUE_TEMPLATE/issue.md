@@ -1,12 +1,3 @@
----
-name: ISSUE
-about: Describe this issue template's purpose here.
-title: ''
-labels: ''
-assignees: ''
-
----
-
 name: 🐞 баг-репорт
 description: сообщить об ошибке в аланаторе
 title: "[БАГ] "
