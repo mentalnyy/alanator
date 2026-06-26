@@ -1,11 +1,12 @@
-# 📦 alanator
+Alanator — современный бесплатный архиватор для Windows с поддержкой ZIP, 7Z, TAR и собственного формата ALN. Разработан с упором на простоту использования, высокую скорость и современный интерфейс.
+![banner](banner.png)
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue)
-![Platform](https://img.shields.io/badge/Platform-Windows-success)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows)
+![MIT](https://img.shields.io/badge/License-MIT-green)
 ![Version](https://img.shields.io/badge/Version-v0.9.0-orange)
 
-**alanator** — бесплатный архиватор с современным графическим интерфейсом, написанный на **Python**.
+⭐ Если вам нравится проект — поставьте звезду репозиторию!
 
 Программа поддерживает популярные форматы архивов **ZIP**, **7Z**, **TAR**, а также собственный формат **`.aln`**.
 
