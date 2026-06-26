@@ -1,11 +1,11 @@
-# 📦 Alanator
+# 📦 alanator
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows-success)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Version](https://img.shields.io/badge/Version-v0.9.0-orange)
 
-**Alanator** — бесплатный архиватор с современным графическим интерфейсом, написанный на **Python**.
+**alanator** — бесплатный архиватор с современным графическим интерфейсом, написанный на **Python**.
 
 Программа поддерживает популярные форматы архивов **ZIP**, **7Z**, **TAR**, а также собственный формат **`.aln`**.
 
@@ -31,7 +31,7 @@
 1. Откройте раздел **Releases**.
 2. Скачайте последнюю версию программы.
 3. Распакуйте архив.
-4. Запустите **Alanator.exe**.
+4. Запустите **alanator.exe**.
 
 ---
 
@@ -51,7 +51,7 @@
 
 ## Создание архива
 
-1. Запустите Alanator.
+1. Запустите alanator.
 2. Перейдите в папку с файлами.
 3. Нажмите **«Новый архив»**.
 4. Выберите формат архива.
